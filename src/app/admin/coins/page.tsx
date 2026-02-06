@@ -1,5 +1,6 @@
 "use client";
 
+// Admin Coins Management - Fixed TypeScript errors
 import { useState, useEffect } from "react";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
