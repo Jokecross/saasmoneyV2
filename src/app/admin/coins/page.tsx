@@ -54,10 +54,10 @@ export default function AdminCoinsPage() {
           .order("coins_balance", { ascending: false });
 
         if (profiles) {
-          const usersWithBalance = profiles.filter(p => p.coins_balance > 0);
+          const usersWithBalance = (profiles as UserWithCoins[]).filter(p => p.coins_balance > 0);
           setUsersWithCoins(usersWithBalance);
 
-          const totalCoins = profiles.reduce((sum, p) => sum + (p.coins_balance || 0), 0);
+          const totalCoins = (profiles as UserWithCoins[]).reduce((sum, p) => sum + (p.coins_balance || 0), 0);
           const totalUsers = profiles.length;
           
           setStats({
