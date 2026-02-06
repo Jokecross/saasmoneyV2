@@ -61,7 +61,7 @@ export default function AdminDashboardPage() {
           .from("profiles")
           .select("coins_balance");
         
-        const totalCoins = coinsData?.reduce((sum, p) => sum + (p.coins_balance || 0), 0) || 0;
+        const totalCoins = (coinsData as any[])?.reduce((sum: number, p: any) => sum + (p.coins_balance || 0), 0) || 0;
 
         // Fetch one-of-one bookings
         const { data: oneOfOneBookings, count: oneOfOneCount } = await supabase

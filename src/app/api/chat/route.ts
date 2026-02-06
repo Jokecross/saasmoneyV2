@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+// import OpenAI from "openai";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Temporarily disabled - OpenAI API key required
+// const openai = new OpenAI({
+//   apiKey: process.env.OPENAI_API_KEY,
+// });
 
 // System prompts par mode
 const SYSTEM_PROMPTS: Record<string, string> = {
@@ -92,6 +93,13 @@ Réponds en français avec des exemples concrets de copy.`,
 };
 
 export async function POST(request: NextRequest) {
+  // Temporarily disabled - OpenAI API not configured
+  return NextResponse.json(
+    { error: "Chat feature temporarily disabled" },
+    { status: 503 }
+  );
+  
+  /* 
   try {
     const { messages, mode = "coach" } = await request.json();
 
@@ -127,4 +135,5 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+  */
 }
