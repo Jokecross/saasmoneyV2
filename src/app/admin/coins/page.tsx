@@ -31,6 +31,11 @@ interface UserWithCoins {
   role: string;
 }
 
+interface AppSettings {
+  id: string;
+  one_of_one_cost: number;
+}
+
 export default function AdminCoinsPage() {
   const [stats, setStats] = useState<CoinStats>({
     totalCoins: 0,
@@ -74,8 +79,8 @@ export default function AdminCoinsPage() {
           .limit(1)
           .single();
 
-        if (settings?.one_of_one_cost) {
-          setCallCost(settings.one_of_one_cost);
+        if (settings && (settings as AppSettings).one_of_one_cost) {
+          setCallCost((settings as AppSettings).one_of_one_cost);
         }
       } catch (error) {
         console.error("Error fetching data:", error);
