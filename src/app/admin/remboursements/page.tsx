@@ -248,14 +248,51 @@ export default function AdminRemboursementsPage() {
         });
       }
 
-      // Send automatic message
-      await supabase
+      // Get the conversation to find the user's last message
+      const { data: lastMessages } = await supabase
         .from("refund_messages")
-        .insert({
-          conversation_id: convId,
-          user_id: user?.id,
-          message: "🤖 Votre demande a été analysée. Notre assistant va vous répondre selon les termes du contrat.",
+        .select("message")
+        .eq("conversation_id", convId)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const userLastMessage = lastMessages?.[0]?.message || "Je souhaite demander un remboursement";
+
+      // Trigger AI response immediately
+      try {
+        const aiResponse = await fetch("/api/refund-ai", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            conversationId: convId,
+            userMessage: userLastMessage,
+          }),
         });
+
+        if (!aiResponse.ok) {
+          console.error("AI response failed:", await aiResponse.text());
+          // Fallback: send a manual message
+          await supabase
+            .from("refund_messages")
+            .insert({
+              conversation_id: convId,
+              user_id: user?.id,
+              message: "🤖 Bonjour ! Je suis l'assistant IA de SaaS Money. Je vais t'aider avec ta demande de remboursement.\n\nPour t'accompagner au mieux, j'ai besoin de comprendre ta situation. Peux-tu me dire :\n\n1. Quelle offre as-tu prise avec SaaS Money ? (3000€, 5000€ ou 15000€)\n2. Depuis combien de temps es-tu dans le programme ?",
+            });
+        }
+      } catch (err) {
+        console.error("Error calling AI:", err);
+        // Fallback: send a manual message
+        await supabase
+          .from("refund_messages")
+          .insert({
+            conversation_id: convId,
+            user_id: user?.id,
+            message: "🤖 Bonjour ! Je suis l'assistant IA de SaaS Money. Je vais t'aider avec ta demande de remboursement.\n\nPour t'accompagner au mieux, j'ai besoin de comprendre ta situation. Peux-tu me dire :\n\n1. Quelle offre as-tu prise avec SaaS Money ? (3000€, 5000€ ou 15000€)\n2. Depuis combien de temps es-tu dans le programme ?",
+          });
+      }
 
       // Reload messages
       if (selectedConversation?.id === convId) {
