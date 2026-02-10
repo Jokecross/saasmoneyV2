@@ -35,6 +35,8 @@ interface Conversation {
   id: string;
   user_id: string;
   status: "open" | "resolved" | "cancelled";
+  acceptance_status: "pending" | "accepted" | "refused";
+  ai_handled: boolean;
   created_at: string;
   updated_at: string;
   user?: {
@@ -172,6 +174,98 @@ export default function AdminRemboursementsPage() {
     }
   };
 
+  // Accept refund request
+  const acceptRefund = async (convId: string) => {
+    try {
+      const { error } = await supabase
+        .from("refund_conversations")
+        .update({
+          acceptance_status: "accepted",
+          ai_handled: false,
+          status: "open"
+        })
+        .eq("id", convId);
+
+      if (error) throw error;
+
+      // Update local state
+      setConversations(conversations.map(c =>
+        c.id === convId ? { ...c, acceptance_status: "accepted" as const, ai_handled: false, status: "open" as const } : c
+      ));
+
+      if (selectedConversation?.id === convId) {
+        setSelectedConversation({
+          ...selectedConversation,
+          acceptance_status: "accepted" as const,
+          ai_handled: false,
+          status: "open" as const
+        });
+      }
+
+      // Send automatic message
+      await supabase
+        .from("refund_messages")
+        .insert({
+          conversation_id: convId,
+          user_id: user?.id,
+          message: "✅ Votre demande de remboursement a été acceptée. Un administrateur va vous répondre sous peu.",
+        });
+
+      // Reload messages
+      if (selectedConversation?.id === convId) {
+        await loadMessages(convId);
+      }
+    } catch (err) {
+      console.error("Error accepting refund:", err);
+    }
+  };
+
+  // Refuse refund request (AI takes over)
+  const refuseRefund = async (convId: string) => {
+    try {
+      const { error } = await supabase
+        .from("refund_conversations")
+        .update({
+          acceptance_status: "refused",
+          ai_handled: true,
+          status: "open"
+        })
+        .eq("id", convId);
+
+      if (error) throw error;
+
+      // Update local state
+      setConversations(conversations.map(c =>
+        c.id === convId ? { ...c, acceptance_status: "refused" as const, ai_handled: true, status: "open" as const } : c
+      ));
+
+      if (selectedConversation?.id === convId) {
+        setSelectedConversation({
+          ...selectedConversation,
+          acceptance_status: "refused" as const,
+          ai_handled: true,
+          status: "open" as const
+        });
+      }
+
+      // Send automatic message
+      await supabase
+        .from("refund_messages")
+        .insert({
+          conversation_id: convId,
+          user_id: user?.id,
+          message: "🤖 Votre demande a été analysée. Notre assistant va vous répondre selon les termes du contrat.",
+        });
+
+      // Reload messages
+      if (selectedConversation?.id === convId) {
+        await loadMessages(convId);
+      }
+    } catch (err) {
+      console.error("Error refusing refund:", err);
+    }
+  };
+
   // Handle Enter key
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -283,7 +377,7 @@ export default function AdminRemboursementsPage() {
           {selectedConversation ? (
             <>
               {/* Chat header */}
-              <div className="p-4 border-b border-gray-200">
+              <div className="p-4 border-b border-gray-200 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar
@@ -324,6 +418,53 @@ export default function AdminRemboursementsPage() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Accept/Refuse section */}
+                {selectedConversation.acceptance_status === "pending" && (
+                  <div className="flex items-center gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-900">
+                        ⚠️ Décision requise
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        Accepter (admin répond) ou Refuser (IA répond)
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => acceptRefund(selectedConversation.id)}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        ✅ Accepter
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => refuseRefund(selectedConversation.id)}
+                        className="border-red-200 text-red-600 hover:bg-red-50"
+                      >
+                        ❌ Refuser
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Status badge */}
+                {selectedConversation.acceptance_status !== "pending" && (
+                  <div className={cn(
+                    "p-3 rounded-xl border text-sm",
+                    selectedConversation.acceptance_status === "accepted"
+                      ? "bg-green-50 border-green-200 text-green-800"
+                      : "bg-orange-50 border-orange-200 text-orange-800"
+                  )}>
+                    {selectedConversation.acceptance_status === "accepted" ? (
+                      <span>✅ <strong>Accepté</strong> - Admin en charge de la conversation</span>
+                    ) : (
+                      <span>🤖 <strong>Refusé</strong> - IA en charge de la conversation</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Messages */}
@@ -384,23 +525,32 @@ export default function AdminRemboursementsPage() {
 
               {/* Input */}
               <div className="p-4 border-t border-gray-200">
-                <div className="flex gap-3">
-                  <Input
-                    placeholder="Répondre en tant qu'admin..."
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="gradient"
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim() || sending}
-                    loading={sending}
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </div>
+                {selectedConversation.acceptance_status === "refused" ? (
+                  <div className="text-center py-3 px-4 bg-orange-50 rounded-xl border border-orange-200">
+                    <p className="text-sm text-orange-800">
+                      🤖 Cette conversation est gérée par l'IA
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <Input
+                      placeholder="Répondre en tant qu'admin..."
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      className="flex-1"
+                      disabled={selectedConversation.acceptance_status === "pending"}
+                    />
+                    <Button
+                      variant="gradient"
+                      onClick={handleSendMessage}
+                      disabled={!newMessage.trim() || sending || selectedConversation.acceptance_status === "pending"}
+                      loading={sending}
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           ) : (

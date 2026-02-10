@@ -38,6 +38,7 @@ export default function RemboursementPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [isAiHandled, setIsAiHandled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
@@ -59,7 +60,7 @@ export default function RemboursementPage() {
         // Check if user already has a refund conversation
         const { data: existingConv, error: convError } = await supabase
           .from("refund_conversations")
-          .select("id")
+          .select("id, ai_handled")
           .eq("user_id", user.id)
           .maybeSingle(); // Use maybeSingle instead of single to handle "no rows" case
 
@@ -72,6 +73,7 @@ export default function RemboursementPage() {
         if (existingConv) {
           // Conversation exists, load it
           setConversationId(existingConv.id);
+          setIsAiHandled(existingConv.ai_handled || false);
           await loadMessages(existingConv.id);
         } else {
           // Create new conversation
@@ -91,6 +93,7 @@ export default function RemboursementPage() {
           }
 
           setConversationId(newConv.id);
+          setIsAiHandled(false);
         }
 
         setLoading(false);
@@ -127,14 +130,17 @@ export default function RemboursementPage() {
     if (!newMessage.trim() || !conversationId || !user?.id || sending) return;
 
     setSending(true);
+    const messageContent = newMessage.trim();
+    setNewMessage(""); // Clear input immediately
 
     try {
+      // Send user message
       const { data, error } = await supabase
         .from("refund_messages")
         .insert({
           conversation_id: conversationId,
           user_id: user.id,
-          message: newMessage.trim(),
+          message: messageContent,
         })
         .select(`
           *,
@@ -145,9 +151,35 @@ export default function RemboursementPage() {
       if (error) throw error;
 
       setMessages([...messages, data]);
-      setNewMessage("");
+
+      // If AI is handling this conversation, trigger AI response
+      if (isAiHandled) {
+        // Wait a bit before showing AI response
+        setTimeout(async () => {
+          try {
+            const response = await fetch("/api/refund-ai", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                conversationId,
+                userMessage: messageContent,
+              }),
+            });
+
+            if (response.ok) {
+              // Reload messages to get AI response
+              await loadMessages(conversationId);
+            }
+          } catch (aiError) {
+            console.error("Error getting AI response:", aiError);
+          }
+        }, 1000);
+      }
     } catch (err) {
       console.error("Error sending message:", err);
+      setNewMessage(messageContent); // Restore message on error
     } finally {
       setSending(false);
     }
@@ -172,19 +204,33 @@ export default function RemboursementPage() {
   return (
     <div className="max-w-4xl mx-auto animate-slide-up">
       {/* Header */}
-      <div className="mb-6 flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => router.push("/app/settings")}
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Retour
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Demande de remboursement</h1>
-          <p className="text-gray-500 text-sm">Conversation avec SaaS Money Admin</p>
+      <div className="mb-6 space-y-3">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.push("/app/settings")}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Retour
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Demande de remboursement</h1>
+            <p className="text-gray-500 text-sm">
+              {isAiHandled
+                ? "🤖 Conversation gérée par notre assistant IA"
+                : "Conversation avec SaaS Money Admin"}
+            </p>
+          </div>
         </div>
+
+        {isAiHandled && (
+          <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl text-sm text-orange-800">
+            <p>
+              <strong>ℹ️ Information :</strong> Cette demande est actuellement gérée par notre assistant IA qui connaît les termes du contrat. Un administrateur peut intervenir si nécessaire.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Chat container */}
@@ -275,7 +321,9 @@ export default function RemboursementPage() {
             </Button>
           </div>
           <p className="text-xs text-gray-400 mt-2">
-            Un membre de l'équipe SaaS Money te répondra dans les plus brefs délais.
+            {isAiHandled
+              ? "🤖 Notre assistant IA te répondra instantanément selon les termes du contrat."
+              : "Un membre de l'équipe SaaS Money te répondra dans les plus brefs délais."}
           </p>
         </div>
       </Card>
