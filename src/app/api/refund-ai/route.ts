@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseClient();
+    // Use server-side Supabase client with user's session (cookies)
+    const supabase = await createServerSupabaseClient();
 
     // Check if conversation is AI-handled
     const { data: conversation, error: convError } = await supabase

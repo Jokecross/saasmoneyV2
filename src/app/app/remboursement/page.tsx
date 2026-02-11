@@ -58,17 +58,21 @@ export default function RemboursementPage() {
 
       try {
         // Check if user already has a refund conversation
-        const { data: existingConv, error: convError } = await supabase
+        // We take the MOST RECENT conversation for this user
+        const { data: existingConvs, error: convError } = await supabase
           .from("refund_conversations")
           .select("id, ai_handled")
           .eq("user_id", user.id)
-          .maybeSingle(); // Use maybeSingle instead of single to handle "no rows" case
+          .order("created_at", { ascending: false })
+          .limit(1);
 
         if (convError) {
           console.error("Error loading conversation:", convError);
           setLoading(false);
           return;
         }
+
+        const existingConv = existingConvs?.[0];
 
         if (existingConv) {
           // Conversation exists, load it
